@@ -36,6 +36,9 @@ curl -X POST "http://localhost:8000/v1/chat/completions" \
 
 支持流式和非流式请求，流式请求需要设置`stream`为`true`，非流式请求需要设置`stream`为`false`。
 
+![image](https://github.com/user-attachments/assets/67017db4-afee-49b6-b5c3-3f732dad350a)
+
+
 
 ![image](https://github.com/user-attachments/assets/c1066680-a102-46a7-ab23-45dee5166bcc)
 
