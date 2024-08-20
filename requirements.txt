@@ -1,2 +1,5 @@
 html2text
 DrissionPage
+fastapi
+pydantic
+uvicorn
