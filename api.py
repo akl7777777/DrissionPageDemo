@@ -89,7 +89,10 @@ async def chat_stream(request: ChatRequest):
             }) + "\n\n"
             yield "data: [DONE]\n\n"
             break
-
+        removeImgs = page.eles('css:img[src="https://huggingface.co/avatars/2edb18bd0206c16b433841a47f53fa8e.svg"]')
+        if removeImgs:
+            for removeImg in removeImgs:
+                page.remove_ele(removeImg)
         removeEles = page.eles('css:[title="Copy to clipboard"]')
         if removeEles:
             for removeEle in removeEles:
