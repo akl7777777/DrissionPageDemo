@@ -56,7 +56,6 @@ async def chat_stream(request: ChatRequest):
 
     if text_areas:
         text_areas[0].click()
-        # 格式化并发送所有消息
         formatted_messages = format_chat_messages(request.messages)
         text_areas[0].input(formatted_messages)
         text_areas[0].input(Keys.ENTER)
@@ -65,9 +64,6 @@ async def chat_stream(request: ChatRequest):
         return
 
     total_markdown = ''
-    no_change_count = 0
-    max_no_change = 100
-
     start_time = time.time()
     message_id = f"chatcmpl-{int(start_time)}"
 
@@ -78,8 +74,22 @@ async def chat_stream(request: ChatRequest):
         "model": request.model,
         "choices": [{"delta": {"role": "assistant"}, "index": 0}]
     }) + "\n\n"
-
+    await asyncio.sleep(1)
     while True:
+        # 检查停止按钮是否可见
+        stop_button = page.ele('css:.btn.flex.h-8.rounded-lg.border.bg-white.px-3.py-1.shadow-sm.transition-all', timeout=1)
+        if not stop_button or not stop_button.states.is_displayed:
+            # 如果停止按钮不可见，说明对话已经结束
+            yield "data: " + json.dumps({
+                "id": message_id,
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": request.model,
+                "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}]
+            }) + "\n\n"
+            yield "data: [DONE]\n\n"
+            break
+
         removeEles = page.eles('css:[title="Copy to clipboard"]')
         if removeEles:
             for removeEle in removeEles:
@@ -104,22 +114,6 @@ async def chat_stream(request: ChatRequest):
                 }) + "\n\n"
 
                 total_markdown = new_total_markdown
-                no_change_count = 0
-            else:
-                no_change_count += 1
-        else:
-            no_change_count += 1
-
-        if no_change_count >= max_no_change:
-            yield "data: " + json.dumps({
-                "id": message_id,
-                "object": "chat.completion.chunk",
-                "created": int(time.time()),
-                "model": request.model,
-                "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}]
-            }) + "\n\n"
-            yield "data: [DONE]\n\n"
-            break
 
         await asyncio.sleep(0.1)
 
@@ -132,11 +126,56 @@ async def chat_completions(request: ChatRequest):
         full_response = ""
         async for chunk in chat_stream(request):
             if chunk.startswith("data: "):
-                data = json.loads(chunk[6:])
-                if "choices" in data and data["choices"] and "delta" in data["choices"][0]:
-                    delta = data["choices"][0]["delta"]
-                    if "content" in delta:
-                        full_response += delta["content"]
+                try:
+                    data = json.loads(chunk[6:])
+                    if "choices" in data and data["choices"] and "delta" in data["choices"][0]:
+                        delta = data["choices"][0]["delta"]
+                        if "content" in delta:
+                            full_response += delta["content"]
+                except json.JSONDecodeError:
+                    # 如果不是有效的 JSON，跳过这个 chunk
+                    continue
+            elif chunk.strip() == "data: [DONE]":
+                break
+
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": request.model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": full_response
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 0,  # 这里需要实际计算
+                "completion_tokens": 0,  # 这里需要实际计算
+                "total_tokens": 0  # 这里需要实际计算
+            }
+        }
+@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatRequest):
+    if request.stream:
+        return StreamingResponse(chat_stream(request), media_type="text/event-stream")
+    else:
+        full_response = ""
+        async for chunk in chat_stream(request):
+            if chunk.startswith("data: "):
+                try:
+                    data = json.loads(chunk[6:])
+                    if "choices" in data and data["choices"] and "delta" in data["choices"][0]:
+                        delta = data["choices"][0]["delta"]
+                        if "content" in delta:
+                            full_response += delta["content"]
+                except json.JSONDecodeError:
+                    # 如果不是有效的 JSON，跳过这个 chunk
+                    continue
+            elif chunk.strip() == "data: [DONE]":
+                break
 
         return {
             "id": f"chatcmpl-{int(time.time())}",
